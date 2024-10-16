@@ -35,9 +35,6 @@ PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
     Platform.SENSOR,
     Platform.DEVICE_TRACKER,
-    Platform.LOCK,
-    Platform.NUMBER,
-    # Platform.CLIMATE,
 ]
 
 

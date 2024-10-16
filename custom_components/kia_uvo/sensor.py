@@ -247,6 +247,18 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.POWER_FACTOR,
     ),
+    SensorEntityDescription(
+        key="ev_charge_limits_ac",
+        name="AC Charging Limit",
+        icon="mdi:ev-plug-type2",
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    SensorEntityDescription(
+        key="ev_charge_limits_dc",
+        name="DC Charging Limit",
+        icon="mdi:ev-plug-ccs2",
+        native_unit_of_measurement=PERCENTAGE,
+    ),
 )
 
 
@@ -324,17 +336,17 @@ class VehicleEntity(SensorEntity, HyundaiKiaConnectEntity):
 
     @property
     def state(self):
-        return "on"
+        return "Available" if len(self.vehicle.data) > 0 else "Unavailable"
 
     @property
     def is_on(self) -> bool:
-        return True
+        return len(self.vehicle.data) > 0
 
     @property
     def state_attributes(self):
         return {
-            "vehicle_data": self.vehicle.data,
             "vehicle_name": self.vehicle.name,
+            "vehicle_data": self.vehicle.data,
         }
 
     @property

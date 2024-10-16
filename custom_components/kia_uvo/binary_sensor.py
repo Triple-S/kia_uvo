@@ -261,6 +261,12 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaBinarySensorEntityDescription, ...]] 
         off_icon="mdi:car-brake-fluid-level",
         device_class=BinarySensorDeviceClass.PROBLEM,
     ),
+    HyundaiKiaBinarySensorEntityDescription(
+        key="is_locked",
+        name="Door Lock",
+        is_on=lambda vehicle: not vehicle.is_locked,
+        device_class=BinarySensorDeviceClass.LOCK,
+    ),
 )
 
 
