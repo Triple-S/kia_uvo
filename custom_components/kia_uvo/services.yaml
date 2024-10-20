@@ -1,14 +1,14 @@
-force_update: 
-  fields: 
-    device_id: 
+force_update:
+  fields:
+    device_id:
       required: false
-      selector: 
-        device: 
+      selector:
+        device:
           integration: kia_uvo
-update: 
-  fields: 
-    device_id: 
+update:
+  fields:
+    device_id:
       required: false
-      selector: 
-        device: 
+      selector:
+        device:
           integration: kia_uvo
