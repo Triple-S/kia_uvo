@@ -32,12 +32,12 @@ def async_setup_services(hass: HomeAssistant) -> bool:
 
     async def async_handle_force_update(call):
         coordinator = _get_coordinator_from_device(hass, call)
-        await coordinator.async_force_update_all()
+        await coordinator.async_force_update(_get_vehicle_id_from_device(hass, call) if ATTR_DEVICE_ID in call.data else None)
 
     async def async_handle_update(call):
         _LOGGER.debug(f"Call:{call.data}")
         coordinator = _get_coordinator_from_device(hass, call)
-        await coordinator.async_update_all()
+        await coordinator.async_update(_get_vehicle_id_from_device(hass, call) if ATTR_DEVICE_ID in call.data else None)
 
     services = {
         SERVICE_FORCE_UPDATE: async_handle_force_update,

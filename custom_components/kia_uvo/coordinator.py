@@ -148,20 +148,32 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
 
         return self.data
 
-    async def async_update_all(self) -> None:
+    async def async_update(self, vehicle_id) -> None:
         """Update vehicle data."""
         await self.async_check_and_refresh_token()
-        await self.hass.async_add_executor_job(
-            self.vehicle_manager.update_all_vehicles_with_cached_state
-        )
+        if (vehicle_id == None):
+            await self.hass.async_add_executor_job(
+               self.vehicle_manager.update_all_vehicles_with_cached_state
+            )
+        else:
+            await self.hass.async_add_executor_job(
+                self.vehicle_manager.update_vehicle_with_cached_state,
+                vehicle_id,
+            )
         await self.async_refresh()
 
-    async def async_force_update_all(self) -> None:
+    async def async_force_update(self, vehicle_id) -> None:
         """Force refresh vehicle data and update it."""
         await self.async_check_and_refresh_token()
-        await self.hass.async_add_executor_job(
-            self.vehicle_manager.force_refresh_all_vehicles_states
-        )
+        if (vehicle_id == None):
+            await self.hass.async_add_executor_job(
+                self.vehicle_manager.force_refresh_all_vehicles_states
+            )
+        else:
+            await self.hass.async_add_executor_job(
+                self.vehicle_manager.force_refresh_vehicle_state,
+                vehicle_id,
+            )
         await self.async_refresh()
 
     async def async_check_and_refresh_token(self):
