@@ -109,42 +109,46 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
             raise ConfigEntryAuthFailed(AuthError) from AuthError
         current_hour = dt_util.now().hour
 
-        if (
-            (self.no_force_refresh_hour_start <= self.no_force_refresh_hour_finish)
-            and (
-                current_hour < self.no_force_refresh_hour_start
-                or current_hour >= self.no_force_refresh_hour_finish
-            )
-        ) or (
-            (self.no_force_refresh_hour_start >= self.no_force_refresh_hour_finish)
-            and (
-                current_hour < self.no_force_refresh_hour_start
-                and current_hour >= self.no_force_refresh_hour_finish
-            )
-        ):
-            try:
-                await self.hass.async_add_executor_job(
-                    self.vehicle_manager.check_and_force_update_vehicles,
-                    self.force_refresh_interval,
+        for vehicle_id in self.vehicle_manager.vehicles:
+            if (
+                (self.no_force_refresh_hour_start <= self.no_force_refresh_hour_finish)
+                and (
+                    current_hour < self.no_force_refresh_hour_start
+                    or current_hour >= self.no_force_refresh_hour_finish
                 )
-            except Exception:
+            ) or (
+                (self.no_force_refresh_hour_start >= self.no_force_refresh_hour_finish)
+                and (
+                    current_hour < self.no_force_refresh_hour_start
+                    and current_hour >= self.no_force_refresh_hour_finish
+                )
+            ):
                 try:
-                    _LOGGER.exception(
-                        f"Force update failed, falling back to cached: {traceback.format_exc()}"
-                    )
                     await self.hass.async_add_executor_job(
-                        self.vehicle_manager.update_all_vehicles_with_cached_state
+                        self.vehicle_manager.check_and_force_update_vehicle,
+                        self.force_refresh_interval,
+                        vehicle_id,
                     )
                 except Exception:
-                    _LOGGER.exception(f"Cached update failed: {traceback.format_exc()}")
-                    raise UpdateFailed(
-                        f"Error communicating with API: {traceback.format_exc()}"
-                    )
+                    try:
+                        _LOGGER.exception(
+                            f"Force update failed, falling back to cached: {traceback.format_exc()}"
+                        )
+                        await self.hass.async_add_executor_job(
+                            self.vehicle_manager.update_vehicle_with_cached_state,
+                            vehicle_id,
+                        )
+                    except Exception:
+                        _LOGGER.exception(f"Cached update failed: {traceback.format_exc()}")
+                        raise UpdateFailed(
+                            f"Error communicating with API: {traceback.format_exc()}"
+                        )
 
-        else:
-            await self.hass.async_add_executor_job(
-                self.vehicle_manager.update_all_vehicles_with_cached_state
-            )
+            else:
+                await self.hass.async_add_executor_job(
+                    self.vehicle_manager.update_vehicle_with_cached_state,
+                    vehicle_id,
+                )
 
         return self.data
 
