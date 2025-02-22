@@ -291,9 +291,12 @@ async def async_setup_entry(
                     coordinator, coordinator.vehicle_manager.vehicles[vehicle_id]
                 )
             )
-        entities.append(
-            VehicleEntity(coordinator, coordinator.vehicle_manager.vehicles[vehicle_id])
-        )
+        if vehicle.data:
+            entities.append(
+                VehicleEntity(
+                    coordinator, coordinator.vehicle_manager.vehicles[vehicle_id]
+                )
+            )
     async_add_entities(entities)
     return True
 
