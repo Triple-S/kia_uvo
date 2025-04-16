@@ -235,12 +235,6 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         icon="mdi:clock-outline",
     ),
     SensorEntityDescription(
-        key="ev_v2l_discharge_limit",
-        name="EV V2L Discharge Limit",
-        native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.BATTERY,
-    ),
-    SensorEntityDescription(
         key="ev_charging_current",
         name="EV Charging Current Limit",
         icon="mdi:lightning-bolt-circle",
@@ -265,6 +259,12 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         key="ev_charge_limits_dc",
         name="DC Charging Limit",
         icon="mdi:ev-plug-ccs2",
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    SensorEntityDescription(
+        key="ev_v2l_discharge_limit",
+        name="V2L Limit",
+        icon="mdi:fuel-cell",
         native_unit_of_measurement=PERCENTAGE,
     ),
 )
