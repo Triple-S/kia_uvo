@@ -18,6 +18,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
     UnitOfTime,
+    EntityCategory,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -51,6 +52,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         icon="mdi:car-wrench",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=DYNAMIC_UNIT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="_next_service_distance",
@@ -58,6 +60,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         icon="mdi:car-wrench",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=DYNAMIC_UNIT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="car_battery_percentage",
@@ -71,6 +74,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         name="Last Updated At",
         icon="mdi:update",
         device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="ev_battery_percentage",
@@ -94,6 +98,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         key="ev_battery_capacity",
         name="EV Battery Capacity",
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="_ev_driving_range",
@@ -166,7 +171,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         icon="mdi:car-electric",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="total_power_regenerated",
@@ -174,7 +179,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         icon="mdi:car-electric",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
     ),
     # Need to remove km hard coding.  Underlying API needs this fixed first.  EU always does KM.
     SensorEntityDescription(
@@ -188,21 +193,25 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         key="front_left_seat_status",
         name="Front Left Seat",
         icon="mdi:car-seat-heater",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="front_right_seat_status",
         name="Front Right Seat",
         icon="mdi:car-seat-heater",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="rear_left_seat_status",
         name="Rear Left Seat",
         icon="mdi:car-seat-heater",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="rear_right_seat_status",
         name="Rear Right Seat",
         icon="mdi:car-seat-heater",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="_geocode_name",
@@ -248,6 +257,12 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="VIN",
+        name="Vehicle Identification Number",
+        icon="mdi:identifier",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="ev_charge_limits_ac",
@@ -316,6 +331,8 @@ class HyundaiKiaConnectSensor(SensorEntity, HyundaiKiaConnectEntity):
         self._attr_name = f"{vehicle.name} {self._description.name}"
         self._attr_state_class = self._description.state_class
         self._attr_device_class = self._description.device_class
+        if description.entity_category:
+            self._attr_entity_category = description.entity_category
 
     @property
     def native_value(self):

@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry
 from hyundai_kia_connect_api import (
     ClimateRequestOptions,
     ScheduleChargingClimateRequestOptions,
+    WindowRequestOptions,
 )
 
 from .const import DOMAIN
