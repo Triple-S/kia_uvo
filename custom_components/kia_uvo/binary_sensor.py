@@ -415,7 +415,7 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaBinarySensorEntityDescription, ...]] 
     HyundaiKiaBinarySensorEntityDescription(
         key="is_locked",
         name="Locked",
-        is_on=lambda vehicle: vehicle.is_locked,
+        is_on=lambda vehicle: not vehicle.is_locked,
         device_class=BinarySensorDeviceClass.LOCK,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -451,12 +451,6 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaBinarySensorEntityDescription, ...]] 
         on_icon="mdi:seat-heater",
         off_icon="mdi:seat-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    HyundaiKiaBinarySensorEntityDescription(
-        key="is_locked",
-        name="Door Lock",
-        is_on=lambda vehicle: not vehicle.is_locked,
-        device_class=BinarySensorDeviceClass.LOCK,
     ),
 )
 
