@@ -16,7 +16,7 @@ from hyundai_kia_connect_api import (
 )
 from hyundai_kia_connect_api.exceptions import AuthenticationError
 
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -115,6 +115,21 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
             await self.async_check_and_refresh_token()
         except AuthenticationError as AuthError:
             raise ConfigEntryAuthFailed(AuthError) from AuthError
+        except Exception as err:
+            # Transient API errors (e.g. DeviceIDError, ReadTimeoutError) from
+            # Kia's EU backend must be surfaced as UpdateFailed rather than
+            # propagating as unexpected exceptions.  HA's update coordinator
+            # counts unexpected exceptions and cancels the config entry after
+            # enough consecutive failures, which makes all entities permanently
+            # unavailable until the integration is manually reloaded.
+            # Raising UpdateFailed(retry_after=60) keeps entities temporarily
+            # unavailable and schedules an automatic retry after 60 seconds
+            # instead of waiting for the next full poll interval.
+            # See: https://github.com/Hyundai-Kia-Connect/kia_uvo/issues/1538
+            raise UpdateFailed(
+                f"Token refresh failed, will retry in 60s: {err}",
+                retry_after=60,
+            ) from err
         current_hour = dt_util.now().hour
 
         for vehicle_id in self.vehicle_manager.vehicles:
@@ -205,6 +220,36 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
             )
         finally:
             await self.async_refresh()
+
+    async def async_await_action_and_force_refresh(self, vehicle_id, action_id):
+        """Wait for action then force refresh to get fresh vehicle data.
+
+        Used after setting charge limits because the soft refresh (cmm/gvi)
+        does not return targetSOC for some vehicles. A force refresh (rems/rvs)
+        ensures the fresh charge limits are read back immediately.
+
+        Uses async_set_updated_data instead of async_refresh to avoid a
+        redundant cmm/gvi API call — the force refresh already updates the
+        vehicle objects in-place (rems/rvs + cmm/gvi), so we just need to
+        notify HA entities to re-read their state.
+        """
+        try:
+            await asyncio.sleep(5)
+            await self.hass.async_add_executor_job(
+                self.vehicle_manager.check_action_status,
+                vehicle_id,
+                action_id,
+                True,
+                60,
+            )
+        finally:
+            try:
+                await self.hass.async_add_executor_job(
+                    self.vehicle_manager.force_refresh_vehicle_state, vehicle_id
+                )
+            except Exception:
+                _LOGGER.exception("Force refresh after setting charge limits failed")
+            self.async_set_updated_data(self.data)
 
     async def _async_save_token(self):
         """Persist the latest token into the config entry."""
