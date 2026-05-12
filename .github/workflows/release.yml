@@ -7,11 +7,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Gets semantic release info
         id: semantic_release_info
-        uses: jossef/action-semantic-release-info@v2
+        uses: jossef/action-semantic-release-info@277fc891fc5ac40ed0e8d6bf59a0e24a25dfdeac # v3.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Update Version and Commit
@@ -27,14 +27,14 @@ jobs:
 
       - name: Push changes
         if: ${{steps.semantic_release_info.outputs.version != ''}}
-        uses: ad-m/github-push-action@v1.0.0
+        uses: ad-m/github-push-action@4cc74773234f74829a8c21bc4d69dd4be9cfa599 # v1.1.0
         with:
           github_token: ${{ github.token }}
           tags: true
 
       - name: Create GitHub Release
         if: ${{steps.semantic_release_info.outputs.version != ''}}
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
