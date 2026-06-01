@@ -506,6 +506,20 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaBinarySensorEntityDescription, ...]] 
         icon="mdi:ev-station",
         is_on=lambda vehicle: vehicle.ev_v2x_status,
     ),
+    HyundaiKiaBinarySensorEntityDescription(
+        key="ev_first_departure_enabled",
+        translation_key="ev_first_departure_enabled",
+        is_on=lambda vehicle: vehicle.ev_first_departure_enabled,
+        on_icon="mdi:clock-outline",
+        off_icon="mdi:clock-outline",
+    ),
+    HyundaiKiaBinarySensorEntityDescription(
+        key="ev_second_departure_enabled",
+        translation_key="ev_second_departure_enabled",
+        is_on=lambda vehicle: vehicle.ev_second_departure_enabled,
+        on_icon="mdi:clock-outline",
+        off_icon="mdi:clock-outline",
+    ),
 )
 
 
