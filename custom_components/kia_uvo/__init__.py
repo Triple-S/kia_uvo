@@ -35,7 +35,6 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
-    Platform.COVER,
     Platform.SENSOR,
     Platform.DEVICE_TRACKER,
 ]
