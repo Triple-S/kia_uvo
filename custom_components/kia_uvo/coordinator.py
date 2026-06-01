@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+import datetime as dt
 from datetime import timedelta
 import traceback
 import logging
 import asyncio
 
 from hyundai_kia_connect_api import (
+    Vehicle,
     VehicleManager,
     ClimateRequestOptions,
     WindowRequestOptions,
     ScheduleChargingClimateRequestOptions,
     Token,
 )
-from hyundai_kia_connect_api.exceptions import AuthenticationError
+from hyundai_kia_connect_api.exceptions import (
+    AuthenticationError,
+    UnsupportedControlError,
+)
 
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 
@@ -56,6 +63,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize."""
         self.platforms: set[str] = set()
+        self._action_lock = asyncio.Lock()
 
         self.vehicle_manager = VehicleManager(
             region=config_entry.data.get(CONF_REGION),
@@ -185,7 +193,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 self.vehicle_manager.update_vehicle_with_cached_state,
                 vehicle_id,
             )
-        await self.async_refresh()
+        self.async_set_updated_data(self.data)
 
     async def async_force_update(self, vehicle_id) -> None:
         """Force refresh vehicle data and update it."""
@@ -199,7 +207,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 self.vehicle_manager.force_refresh_vehicle_state,
                 vehicle_id,
             )
-        await self.async_refresh()
+        self.async_set_updated_data(self.data)
 
     async def async_force_refresh_vehicle(self, vehicle_id: str) -> None:
         """Force refresh a single vehicle's state."""
