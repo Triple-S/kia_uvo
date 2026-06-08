@@ -12,6 +12,8 @@ from hyundai_kia_connect_api import (
     ClimateRequestOptions,
     ScheduleChargingClimateRequestOptions,
     WindowRequestOptions,
+    POIInfo,
+    POICoord,
 )
 
 from .const import DOMAIN
@@ -39,6 +41,25 @@ def async_setup_services(hass: HomeAssistant) -> bool:
         _LOGGER.debug(f"Call:{call.data}")
         coordinator = _get_coordinator_from_device(hass, call)
         await coordinator.async_update(_get_vehicle_id_from_device(hass, call) if ATTR_DEVICE_ID in call.data else None)
+
+    async def async_handle_set_navigation(call):
+        coordinator = _get_coordinator_from_device(hass, call)
+        vehicle_id = _get_vehicle_id_from_device(hass, call)
+        latitude = call.data["latitude"]
+        longitude = call.data["longitude"]
+        name = call.data["name"]
+        address = call.data.get("address", "")
+        zip_code = call.data.get("zip_code", "")
+        place_id = call.data.get("place_id", "")
+
+        poi = POIInfo(
+            coord=POICoord(lat=float(latitude), lon=float(longitude)),
+            name=name,
+            addr=address,
+            zip=zip_code,
+            place_id=place_id,
+        )
+        await coordinator.async_set_navigation(vehicle_id, [poi])
 
     services = {
         SERVICE_FORCE_UPDATE: async_handle_force_update,

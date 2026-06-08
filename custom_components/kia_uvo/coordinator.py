@@ -16,6 +16,7 @@ from hyundai_kia_connect_api import (
     ClimateRequestOptions,
     WindowRequestOptions,
     ScheduleChargingClimateRequestOptions,
+    POIInfo,
     Token,
 )
 from hyundai_kia_connect_api.exceptions import (
