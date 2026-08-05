@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Final
-
-from hyundai_kia_connect_api import Vehicle
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,18 +12,19 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
     UnitOfTime,
-    EntityCategory,
 )
-
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from hyundai_kia_connect_api import Vehicle
+from hyundai_kia_connect_api.const import ENGINE_TYPES
 
 from .const import CHARGING_CURRENTS, DOMAIN, DYNAMIC_UNIT
 from .entity import HyundaiKiaConnectEntity
@@ -71,7 +71,6 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="last_updated_at",
@@ -405,6 +404,39 @@ SENSOR_DESCRIPTIONS: Final[tuple[SensorEntityDescription, ...]] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
+        key="tire_pressure_front_left",
+        translation_key="tire_pressure_front_left",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="tire_pressure_front_right",
+        translation_key="tire_pressure_front_right",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="tire_pressure_rear_left",
+        translation_key="tire_pressure_rear_left",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="tire_pressure_rear_right",
+        translation_key="tire_pressure_rear_right",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="drive_mode",
+        translation_key="drive_mode",
+        icon="mdi:car-cog",
+    ),
+    SensorEntityDescription(
         key="ev_charge_limits_ac",
         name="AC Charging Limit",
         icon="mdi:ev-plug-type2",
@@ -433,10 +465,46 @@ async def async_setup_entry(
     """Set up sensor platform."""
     coordinator = hass.data[DOMAIN][config_entry.unique_id]
     entities = []
-    for vehicle_id in coordinator.vehicle_manager.vehicles.keys():
+    for vehicle_id in coordinator.vehicle_manager.vehicles:
         vehicle: Vehicle = coordinator.vehicle_manager.vehicles[vehicle_id]
         for description in SENSOR_DESCRIPTIONS:
-            if getattr(vehicle, description.key, None) is not None:
+            if description.key == "_air_temperature":
+                # The setpoint is transient — it is None while climate is off
+                # (USA returns airTemp.value "OFF"), so don't gate on it. Gate
+                # on climate presence (air_control_is_on, the same signal the
+                # climate entity uses) to avoid creating an unusable sensor on
+                # vehicles that report no climate. A None setpoint -> HA
+                # `unknown`; the real setpoint arrives on the next poll.
+                create = (
+                    vehicle.air_control_is_on is not None
+                    or vehicle._air_temperature is not None
+                )
+            elif description.key == "car_battery_percentage":
+                # The 12V SoC is transient — None while the telematics unit
+                # is asleep, after a 12V reset, or when the status payload
+                # omits it. Don't gate creation on it: a None at setup (e.g.
+                # a version-update reload) means the entity isn't yielded and
+                # HA marks it "no longer provided", with no return until the
+                # next reload. Always create; None -> HA `unknown`, the real
+                # SoC arrives on the next poll. See #1803.
+                create = True
+            elif description.key.startswith("tire_pressure_"):
+                # Transient like _air_temperature above: some backends (AU/NZ)
+                # report the TPMS no-data sentinel whenever the car is parked
+                # — nearly always the case at setup — so don't gate on the
+                # value. The parsed unit is the capability signal: non-None
+                # exactly for direct-TPMS vehicles (known PressureUnit), None
+                # for indirect TPMS (PressureUnit 3, e.g. KONA — #1786) and
+                # old-protocol vehicles, which never report a numeric
+                # pressure. A None pressure -> HA `unknown` until a poll
+                # catches the car driving.
+                create = (
+                    getattr(vehicle, description.key, None) is not None
+                    or vehicle.tire_pressure_unit is not None
+                )
+            else:
+                create = getattr(vehicle, description.key, None) is not None
+            if create:
                 entities.append(
                     HyundaiKiaConnectSensor(coordinator, description, vehicle)
                 )
@@ -475,6 +543,16 @@ class HyundaiKiaConnectSensor(SensorEntity, HyundaiKiaConnectEntity):
         self._attr_device_class = description.device_class
         if description.entity_category:
             self._attr_entity_category = description.entity_category
+        # For electrified vehicles (BEV/PHEV) the traction battery is the
+        # device's primary battery. Drop the battery device_class from the
+        # 12 V auxiliary sensor so Home Assistant's device-page battery picker
+        # (which selects the first sensor with device_class=battery, ignoring
+        # entity_category) shows the EV battery instead of the 12 V level.
+        # HEV/ICE keep the 12 V as their battery. See issue #1749.
+        if description.key == "car_battery_percentage":
+            engine_type = getattr(vehicle, "engine_type", None)
+            if engine_type in (ENGINE_TYPES.EV, ENGINE_TYPES.PHEV):
+                self._attr_device_class = None
 
     @property
     def native_value(self):
@@ -499,9 +577,9 @@ class HyundaiKiaConnectSensor(SensorEntity, HyundaiKiaConnectEntity):
     @property
     def state_attributes(self):
         if self.entity_description.key == "_geocode_name":
-            return {"address": getattr(self.vehicle, "_geocode_address")}
+            return {"address": self.vehicle._geocode_address}
         elif self.entity_description.key == "dtc_count":
-            return {"DTC Text": getattr(self.vehicle, "dtc_descriptions")}
+            return {"DTC Text": self.vehicle.dtc_descriptions}
 
 
 class VehicleEntity(SensorEntity, HyundaiKiaConnectEntity):

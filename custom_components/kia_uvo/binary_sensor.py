@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-import logging
 from typing import Final
-
-from homeassistant.const import EntityCategory
-from hyundai_kia_connect_api import Vehicle
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,8 +13,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from hyundai_kia_connect_api import Vehicle
 
 from .const import DOMAIN
 from .coordinator import HyundaiKiaConnectDataUpdateCoordinator
@@ -539,6 +538,24 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaBinarySensorEntityDescription, ...]] 
         is_on=lambda vehicle: vehicle.ev_v2x_status,
     ),
     HyundaiKiaBinarySensorEntityDescription(
+        key="oil_level_warning_is_on",
+        translation_key="oil_level_warning_is_on",
+        is_on=lambda vehicle: vehicle.oil_level_warning_is_on,
+        on_icon="mdi:oil",
+        off_icon="mdi:oil",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    HyundaiKiaBinarySensorEntityDescription(
+        key="battery_auxiliary_fail_warning_is_on",
+        translation_key="battery_auxiliary_fail_warning_is_on",
+        is_on=lambda vehicle: vehicle.battery_auxiliary_fail_warning_is_on,
+        on_icon="mdi:car-battery",
+        off_icon="mdi:car-battery",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    HyundaiKiaBinarySensorEntityDescription(
         key="ev_first_departure_enabled",
         translation_key="ev_first_departure_enabled",
         is_on=lambda vehicle: vehicle.ev_first_departure_enabled,
@@ -563,7 +580,7 @@ async def async_setup_entry(
     """Set up binary_sensor platform."""
     coordinator = hass.data[DOMAIN][config_entry.unique_id]
     entities: list[HyundaiKiaConnectBinarySensor] = []
-    for vehicle_id in coordinator.vehicle_manager.vehicles.keys():
+    for vehicle_id in coordinator.vehicle_manager.vehicles:
         vehicle: Vehicle = coordinator.vehicle_manager.vehicles[vehicle_id]
         for description in SENSOR_DESCRIPTIONS:
             if getattr(vehicle, description.key, None) is not None:
