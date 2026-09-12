@@ -588,8 +588,6 @@ async def async_setup_entry(
                     coordinator, coordinator.vehicle_manager.vehicles[vehicle_id]
                 )
             )
-<<<<<<< HEAD
-=======
         entities.append(
             VehicleEntity(coordinator, coordinator.vehicle_manager.vehicles[vehicle_id])
         )
@@ -604,7 +602,6 @@ async def async_setup_entry(
                         coordinator, coordinator.vehicle_manager.vehicles[vehicle_id]
                     )
                 )
->>>>>>> 8462db1914537a87366b7e430514c00c5d25cba4
     async_add_entities(entities)
     return True
 
@@ -727,57 +724,6 @@ class DailyDrivingStatsEntity(SensorEntity, HyundaiKiaConnectEntity):
     @property
     def unit_of_measurement(self):
         return UnitOfTime.DAYS
-<<<<<<< HEAD
-=======
-
-
-class TodaysDailyDrivingStatsEntity(SensorEntity, HyundaiKiaConnectEntity):
-    _attr_translation_key = "todays_daily_driving_stats"
-
-    def __init__(self, coordinator, vehicle: Vehicle):
-        super().__init__(coordinator, vehicle)
-
-    @property
-    def state(self):
-        today = date.today()
-        todayskey = today.strftime("%Y-%m-%d")
-        return todayskey
-
-    @property
-    def state_attributes(self):
-        today = date.today()
-        todayskey = today.strftime("%Y-%m-%d")
-        m = {
-            "today_date": todayskey,
-            "total_consumed": 0,
-            "engine_consumption": 0,
-            "climate_consumption": 0,
-            "onboard_electronics_consumption": 0,
-            "battery_care_consumption": 0,
-            "regenerated_energy": 0,
-            "distance": 0,
-        }
-        for day in self.vehicle.daily_stats:
-            key = day.date.strftime("%Y-%m-%d")
-            if key == todayskey:
-                todayvalue = {
-                    "today_date": key,
-                    "total_consumed": day.total_consumed,
-                    "engine_consumption": day.engine_consumption,
-                    "climate_consumption": day.climate_consumption,
-                    "onboard_electronics_consumption": day.onboard_electronics_consumption,
-                    "battery_care_consumption": day.battery_care_consumption,
-                    "regenerated_energy": day.regenerated_energy,
-                    "distance": day.distance,
-                }
-                m = todayvalue
-                break
-        return m
-
-    @property
-    def unique_id(self):
-        return f"{DOMAIN}-todays-daily-driving-stats-{self.vehicle.id}"
-
 
 class SVMStatusSensor(SensorEntity, HyundaiKiaConnectEntity):
     """SVM capture metadata sensor (companion to the SVM image entity).
@@ -822,4 +768,3 @@ class SVMStatusSensor(SensorEntity, HyundaiKiaConnectEntity):
             "door_open": details.door_open,
             "trunk_open": details.trunk_open,
         }
->>>>>>> 8462db1914537a87366b7e430514c00c5d25cba4
