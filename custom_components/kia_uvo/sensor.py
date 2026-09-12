@@ -524,19 +524,19 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
         translation_key="drive_mode",
         icon="mdi:car-cog",
     ),
-    SensorEntityDescription(
+    HyundaiKiaSensorEntityDescription(
         key="ev_charge_limits_ac",
         name="AC Charging Limit",
         icon="mdi:ev-plug-type2",
         native_unit_of_measurement=PERCENTAGE,
     ),
-    SensorEntityDescription(
+    HyundaiKiaSensorEntityDescription(
         key="ev_charge_limits_dc",
         name="DC Charging Limit",
         icon="mdi:ev-plug-ccs2",
         native_unit_of_measurement=PERCENTAGE,
     ),
-    SensorEntityDescription(
+    HyundaiKiaSensorEntityDescription(
         key="ev_v2l_discharge_limit",
         name="V2L Limit",
         icon="mdi:fuel-cell",
