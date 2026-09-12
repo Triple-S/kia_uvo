@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Hassfest validation
-        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb # master
+        uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93 # master
 
   validate-hacs:
     runs-on: ubuntu-latest
@@ -20,3 +20,34 @@ jobs:
         uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
+
+  validate-mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install mypy and dependencies
+        run: |
+          pip install mypy==2.3.1 homeassistant==2026.2.3 hyundai_kia_connect_api==4.27.2
+      - name: Run mypy
+        # Phase 2: core non-platform files + platform files except sensor.py.
+        # Extend to the whole custom_components/kia_uvo/ package (sensor.py is
+        # the last remaining file) once it is strict-clean as well.
+        run: |
+          mypy --strict --ignore-missing-imports \
+            custom_components/kia_uvo/__init__.py \
+            custom_components/kia_uvo/config_flow.py \
+            custom_components/kia_uvo/coordinator.py \
+            custom_components/kia_uvo/entity.py \
+            custom_components/kia_uvo/services.py \
+            custom_components/kia_uvo/binary_sensor.py \
+            custom_components/kia_uvo/button.py \
+            custom_components/kia_uvo/climate.py \
+            custom_components/kia_uvo/cover.py \
+            custom_components/kia_uvo/device_tracker.py \
+            custom_components/kia_uvo/lock.py \
+            custom_components/kia_uvo/number.py \
+            custom_components/kia_uvo/switch.py \
+            custom_components/kia_uvo/time.py

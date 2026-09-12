@@ -26,6 +26,7 @@ from hyundai_kia_connect_api import (
     ClimateRequestOptions,
     POIInfo,
     ScheduleChargingClimateRequestOptions,
+    SVMDetails,
     Token,
     Vehicle,
     VehicleManager,
@@ -58,13 +59,16 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
+class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching data from the API."""
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize."""
         self.platforms: set[str] = set()
         self._action_lock = asyncio.Lock()
+        self._svm_details: dict[str, SVMDetails] = {}
+        # Per-vehicle SVM fisheye dewarp toggle (local UI state, off by default).
+        self._svm_dewarp: dict[str, bool] = {}
 
         self.vehicle_manager = VehicleManager(
             region=config_entry.data.get(CONF_REGION),
@@ -125,7 +129,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
             self.no_force_refresh_hour_finish,
         )
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library. Called by update_coordinator periodically.
 
         Allow to update for the first time without further checking
@@ -235,14 +239,59 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.async_set_updated_data(self.data)
 
-    async def async_check_and_refresh_token(self):
+    async def async_supports_svm(self, vehicle_id: str) -> bool:
+        """Return whether the given vehicle supports SVM.
+
+        Capability is a per-region class attribute stamped on the Vehicle by
+        the API library (like supports_window_control), so this is a plain
+        attribute read — no API call, no executor job needed.
+        """
+        vehicle = self.vehicle_manager.vehicles.get(vehicle_id)
+        if vehicle is None:
+            return False
+        return bool(vehicle.supports_svm)
+
+    def svm_dewarp_enabled(self, vehicle_id: str) -> bool:
+        """Return the per-vehicle SVM fisheye dewarp preference."""
+        return self._svm_dewarp.get(vehicle_id, False)
+
+    def set_svm_dewarp(self, vehicle_id: str, enabled: bool) -> None:
+        """Set the per-vehicle SVM fisheye dewarp preference."""
+        self._svm_dewarp[vehicle_id] = enabled
+
+    def get_cached_svm_details(self, vehicle_id: str) -> SVMDetails | None:
+        """Return cached SVM details for a vehicle, or None if not yet fetched."""
+        return self._svm_details.get(vehicle_id)
+
+    async def async_get_svm_details(self, vehicle_id: str) -> SVMDetails:
+        """Fetch the latest cached SVM image and metadata from the API."""
+        details = await self.hass.async_add_executor_job(
+            self.vehicle_manager.get_svm_details, vehicle_id
+        )
+        self._svm_details[vehicle_id] = details
+        return details
+
+    async def async_request_svm_capture(self, vehicle_id: str) -> SVMDetails:
+        """Trigger a fresh SVM capture and update the cached details."""
+        details = await self.hass.async_add_executor_job(
+            self.vehicle_manager.request_svm_capture,
+            vehicle_id,
+            True,  # acknowledged_warning — capture is always a user-initiated action
+        )
+        self._svm_details[vehicle_id] = details
+        self.async_set_updated_data(self.data)
+        return details
+
+    async def async_check_and_refresh_token(self) -> None:
         """Refresh token if needed via library."""
         await self.hass.async_add_executor_job(
             self.vehicle_manager.check_and_refresh_token
         )
         await self._async_save_token()
 
-    async def async_await_action_and_refresh(self, vehicle_id, action_id):
+    async def async_await_action_and_refresh(
+        self, vehicle_id: str, action_id: str
+    ) -> None:
         try:
             await asyncio.sleep(5)
             await self.hass.async_add_executor_job(
@@ -255,7 +304,9 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
         finally:
             await self.async_refresh()
 
-    async def async_await_action_and_force_refresh(self, vehicle_id, action_id):
+    async def async_await_action_and_force_refresh(
+        self, vehicle_id: str, action_id: str
+    ) -> None:
         """Wait for action then force refresh to get fresh vehicle data.
 
         Used after setting charge limits because the soft refresh (cmm/gvi)
@@ -285,12 +336,68 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.exception("Force refresh after call failed")
             self.async_set_updated_data(self.data)
 
-    async def _async_save_token(self):
+    async def _async_send_action(
+        self,
+        vehicle_id: str,
+        action_fn: Callable[[], Any],
+        error_label: str,
+        *,
+        force_refresh: bool = False,
+    ) -> None:
+        """Send a vehicle action, wait for completion, and refresh data.
+
+        Serializes actions with a lock to prevent DuplicateRequestError
+        from the Hyundai API when commands overlap. If another action is
+        already in progress, raises HomeAssistantError immediately so
+        the user gets a clear message instead of a mysterious long wait.
+        """
+        if self._action_lock.locked():
+            _LOGGER.warning(
+                "Vehicle action '%s' rejected: another action is already in progress",
+                error_label,
+            )
+            raise HomeAssistantError(
+                "Another vehicle action is in progress. "
+                "Please wait for it to complete and try again."
+            )
+        async with self._action_lock:
+            await self.async_check_and_refresh_token()
+            try:
+                action_id = await self.hass.async_add_executor_job(action_fn)
+            except UnsupportedControlError as err:
+                raise HomeAssistantError(
+                    f"Vehicle does not support this action: {err}"
+                ) from err
+            except Exception as err:
+                raise HomeAssistantError(f"Failed to {error_label}: {err}") from err
+            try:
+                if force_refresh:
+                    await self.async_await_action_and_force_refresh(
+                        vehicle_id, action_id
+                    )
+                else:
+                    await self.async_await_action_and_refresh(vehicle_id, action_id)
+            except Exception:
+                _LOGGER.exception(
+                    "Action '%s' was sent but confirmation polling failed",
+                    error_label,
+                )
+
+    async def async_set_navigation(
+        self, vehicle_id: str, poi_list: list[POIInfo]
+    ) -> None:
+        await self._async_send_action(
+            vehicle_id,
+            lambda: self.vehicle_manager.set_navigation(vehicle_id, poi_list),
+            "set navigation",
+        )
+
+    async def _async_save_token(self) -> None:
         """Persist the latest token into the config entry."""
+        config_entry = self.config_entry
+        assert config_entry is not None
         new_token = self.vehicle_manager.token.to_dict()
         # Only update if token actually changed
-        if new_token and new_token != self.config_entry.data.get(CONF_TOKEN):
-            updated_data = {**self.config_entry.data, CONF_TOKEN: new_token}
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=updated_data
-            )
+        if new_token and new_token != config_entry.data.get(CONF_TOKEN):
+            updated_data = {**config_entry.data, CONF_TOKEN: new_token}
+            self.hass.config_entries.async_update_entry(config_entry, data=updated_data)
