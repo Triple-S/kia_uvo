@@ -270,6 +270,15 @@
       },
       "svm_status": {
         "name": "SVM Status"
+      },
+      "ev_charge_limits_ac": {
+        "name": "AC Charging Limit"
+      },
+      "ev_charge_limits_dc": {
+        "name": "DC Charging Limit"
+      },
+      "ev_v2l_discharge_limit": {
+        "name": "V2L Limit"
       }
     },
     "binary_sensor": {
@@ -361,10 +370,10 @@
         "name": "Fuel Low Level"
       },
       "headlamp_left_low": {
-        "name": "Front Left Lamp Fault"
+        "name": "Headlamp Left Low Fault"
       },
       "headlamp_right_low": {
-        "name": "Front Right Lamp Fault"
+        "name": "Headlamp Right Low Fault"
       },
       "headlamp_left_high": {
         "name": "Headlamp Left High Fault"
@@ -388,7 +397,7 @@
         "name": "IGN3"
       },
       "is_locked": {
-        "name": "Locked"
+        "name": "Door Lock"
       },
       "rear_left_seat_heater_on": {
         "name": "Rear Left Seat Heater"
@@ -412,10 +421,10 @@
         "name": "Steering Wheel Heater"
       },
       "stop_lamp_left": {
-        "name": "Rear Left Lamp Fault"
+        "name": "Stop Lamp Left Fault"
       },
       "stop_lamp_right": {
-        "name": "Rear Right Lamp Fault"
+        "name": "Stop Lamp Right Fault"
       },
       "sunroof_is_open": {
         "name": "Sunroof"
@@ -487,35 +496,9 @@
         "name": "12V Battery Fault"
       }
     },
-    "lock": {
-      "door_lock": {
-        "name": "Door Lock"
-      }
-    },
     "button": {
       "force_refresh": {
         "name": "Force Refresh"
-      },
-      "start_hazard_lights": {
-        "name": "Start Hazard Lights"
-      },
-      "start_hazard_lights_and_horn": {
-        "name": "Start Hazard Lights and Horn"
-      },
-      "start_valet_mode": {
-        "name": "Start Valet Mode"
-      },
-      "stop_valet_mode": {
-        "name": "Stop Valet Mode"
-      },
-      "open_all_windows": {
-        "name": "Open All Windows"
-      },
-      "close_all_windows": {
-        "name": "Close All Windows"
-      },
-      "vent_all_windows": {
-        "name": "Vent All Windows"
       },
       "capture_svm_image": {
         "name": "Capture SVM Image"
@@ -538,89 +521,10 @@
         "name": "SVM Bird's-eye View"
       }
     },
-    "cover": {
-      "front_left_window": {
-        "name": "Front Left Window"
-      },
-      "front_right_window": {
-        "name": "Front Right Window"
-      },
-      "back_left_window": {
-        "name": "Back Left Window"
-      },
-      "back_right_window": {
-        "name": "Back Right Window"
-      }
-    },
-    "switch": {
-      "ev_charging": {
-        "name": "EV Charging"
-      },
-      "climate": {
-        "name": "Climate"
-      },
-      "ev_first_departure_climate_defrost": {
-        "name": "First departure defrost"
-      },
-      "ev_first_departure_climate_enabled": {
-        "name": "First departure climate"
-      },
-      "ev_first_departure_enabled": {
-        "name": "EV Scheduled Departure 1"
-      },
-      "ev_second_departure_climate_defrost": {
-        "name": "Second departure defrost"
-      },
-      "ev_second_departure_climate_enabled": {
-        "name": "Second departure climate"
-      },
-      "ev_second_departure_enabled": {
-        "name": "EV Scheduled Departure 2"
-      },
-      "ev_off_peak_charge_only_enabled": {
-        "name": "Off-peak charge only"
-      },
-      "ev_schedule_charge_enabled": {
-        "name": "Scheduled charging"
-      },
-      "ev_charge_port_door": {
-        "name": "Charge Port"
-      },
-      "valet_mode_control": {
-        "name": "Valet Mode"
-      },
-      "svm_dewarp": {
-        "name": "SVM Dewarp"
-      }
-    },
-    "climate": {
-      "climate_control": {
-        "name": "Climate Control"
-      }
-    },
-    "number": {
-      "ev_charge_limits_ac": {
-        "name": "AC Charging Limit"
-      },
-      "ev_charge_limits_dc": {
-        "name": "DC Charging Limit"
-      },
-      "ev_v2l_discharge_limit": {
-        "name": "V2L Limit"
-      }
-    },
     "device_tracker": {
       "location": {
         "name": "Location"
       }
     },
-    "time": {
-      "ev_off_peak_start_time": {
-        "name": "Off-peak charge start time"
-      },
-      "ev_off_peak_end_time": {
-        "name": "Off-peak charge end time"
-      }
-    }
   }
 }

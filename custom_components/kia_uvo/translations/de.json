@@ -361,6 +361,15 @@
       },
       "drive_mode": {
         "name": "Drive Mode"
+      },
+      "ev_charge_limits_ac": {
+        "name": "AC Charging Limit"
+      },
+      "ev_charge_limits_dc": {
+        "name": "DC Charging Limit"
+      },
+      "ev_v2l_discharge_limit": {
+        "name": "V2L Limit"
       }
     },
     "binary_sensor": {
@@ -476,10 +485,10 @@
         "name": "Headlamp Status"
       },
       "headlamp_left_low": {
-        "name": "Front Left Lamp Fault"
+        "name": "Headlamp Left Low Fault"
       },
       "headlamp_right_low": {
-        "name": "Front Right Lamp Fault"
+        "name": "Headlamp Right Low Fault"
       },
       "headlamp_left_high": {
         "name": "Headlamp Left High Fault"
@@ -494,10 +503,10 @@
         "name": "Headlamp Right Bifunctional Fault"
       },
       "stop_lamp_left": {
-        "name": "Rear Left Lamp Fault"
+        "name": "Stop Lamp Left Fault"
       },
       "stop_lamp_right": {
-        "name": "Rear Right Lamp Fault"
+        "name": "Stop Lamp Right Fault"
       },
       "turn_signal_left_front": {
         "name": "Turn Signal Left Front"
@@ -512,7 +521,7 @@
         "name": "Turn Signal Right Rear"
       },
       "is_locked": {
-        "name": "Locked"
+        "name": "Door Lock"
       },
       "front_left_seat_heater_on": {
         "name": "Front Left Seat Heater"
@@ -533,38 +542,9 @@
         "name": "12V Battery Fault"
       }
     },
-    "lock": {
-      "door_lock": {
-        "name": "Door Lock"
-      }
-    },
     "button": {
       "force_refresh": {
         "name": "Force Refresh"
-      }
-    },
-    "switch": {
-      "ev_charging": {
-        "name": "EV Charging"
-      },
-      "climate": {
-        "name": "Climate"
-      }
-    },
-    "climate": {
-      "climate_control": {
-        "name": "Climate Control"
-      }
-    },
-    "number": {
-      "ev_charge_limits_ac": {
-        "name": "AC Charging Limit"
-      },
-      "ev_charge_limits_dc": {
-        "name": "DC Charging Limit"
-      },
-      "ev_v2l_discharge_limit": {
-        "name": "V2L Limit"
       }
     },
     "device_tracker": {
