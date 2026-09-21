@@ -35,64 +35,6 @@ BUTTON_DESCRIPTIONS: Final[tuple[HyundaiKiaButtonDescription, ...]] = (
         press_action="async_force_refresh_vehicle",
     ),
     HyundaiKiaButtonDescription(
-        key="start_hazard_lights",
-        translation_key="start_hazard_lights",
-        icon="mdi:hazard-lights",
-        press_action="async_start_hazard_lights",
-        enabled_fn=lambda _: False,
-    ),
-    HyundaiKiaButtonDescription(
-        key="start_hazard_lights_and_horn",
-        translation_key="start_hazard_lights_and_horn",
-        icon="mdi:car-emergency",
-        press_action="async_start_hazard_lights_and_horn",
-        enabled_fn=lambda _: False,
-    ),
-    HyundaiKiaButtonDescription(
-        key="start_valet_mode",
-        translation_key="start_valet_mode",
-        icon="mdi:key-variant",
-        press_action="async_start_valet_mode",
-        exists_fn=lambda vehicle: vehicle.supports_valet_mode,
-    ),
-    HyundaiKiaButtonDescription(
-        key="stop_valet_mode",
-        translation_key="stop_valet_mode",
-        icon="mdi:key-variant",
-        press_action="async_stop_valet_mode",
-        exists_fn=lambda vehicle: vehicle.supports_valet_mode,
-    ),
-    HyundaiKiaButtonDescription(
-        key="open_all_windows",
-        translation_key="open_all_windows",
-        icon="mdi:window-maximize",
-        press_action="async_open_all_windows",
-        exists_fn=lambda vehicle: (
-            vehicle.supports_window_control
-            and vehicle.front_left_window_is_open is not None
-        ),
-    ),
-    HyundaiKiaButtonDescription(
-        key="close_all_windows",
-        translation_key="close_all_windows",
-        icon="mdi:window-minimize",
-        press_action="async_close_all_windows",
-        exists_fn=lambda vehicle: (
-            vehicle.supports_window_control
-            and vehicle.front_left_window_is_open is not None
-        ),
-    ),
-    HyundaiKiaButtonDescription(
-        key="vent_all_windows",
-        translation_key="vent_all_windows",
-        icon="mdi:window-open-variant",
-        press_action="async_vent_all_windows",
-        exists_fn=lambda vehicle: (
-            vehicle.supports_window_control
-            and vehicle.front_left_window_is_open is not None
-        ),
-    ),
-    HyundaiKiaButtonDescription(
         key="capture_svm_image",
         translation_key="capture_svm_image",
         icon="mdi:camera-iris",
