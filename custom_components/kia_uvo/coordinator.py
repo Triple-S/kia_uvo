@@ -331,6 +331,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
     async def async_await_action_and_refresh(
         self, vehicle_id: str, action_id: str
     ) -> None:
+        """Wait for a vehicle action to complete, then refresh the cached data."""
         try:
             await asyncio.sleep(5)
             await self.hass.async_add_executor_job(
@@ -425,6 +426,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
     async def async_set_navigation(
         self, vehicle_id: str, poi_list: list[POIInfo]
     ) -> None:
+        """Send points of interest to the vehicle's navigation."""
         await self._async_send_action(
             vehicle_id,
             lambda: self.vehicle_manager.set_navigation(vehicle_id, poi_list),
