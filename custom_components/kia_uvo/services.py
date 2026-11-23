@@ -1,7 +1,7 @@
 """Services for Hyundai / Kia Connect integration."""
 
+from datetime import time
 import logging
-from datetime import datetime
 from typing import Any, cast
 
 from homeassistant.config_entries import ConfigEntry
@@ -44,7 +44,7 @@ def async_setup_services(hass: HomeAssistant) -> bool:
         await coordinator.async_force_update(_get_vehicle_id_from_device(hass, call) if ATTR_DEVICE_ID in call.data else None)
 
     async def async_handle_update(call: ServiceCall) -> None:
-        _LOGGER.debug(f"Call:{call.data}")
+        _LOGGER.debug("Call:%s", call.data)
         coordinator = _get_coordinator_from_device(hass, call)
         await coordinator.async_update(_get_vehicle_id_from_device(hass, call) if ATTR_DEVICE_ID in call.data else None)
 
@@ -103,7 +103,7 @@ def _get_vehicle_id_from_device(hass: HomeAssistant, call: ServiceCall) -> str:
         )
         vehicles = coordinator.vehicle_manager.vehicles
         if len(vehicles) == 1:
-            return cast(str, next(iter(vehicles.keys())))
+            return next(iter(vehicles))
 
     device_entry = device_registry.async_get(hass).async_get(call.data[ATTR_DEVICE_ID])
     if device_entry is None:

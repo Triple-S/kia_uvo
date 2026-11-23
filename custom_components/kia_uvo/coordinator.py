@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
-import logging
-import traceback
 from collections.abc import Callable
+import datetime as dt
 from datetime import timedelta
 from functools import partial
-from typing import Any
+import logging
+from typing import Any, Literal
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -19,8 +18,9 @@ from homeassistant.const import (
     CONF_SCAN_INTERVAL,
     CONF_USERNAME,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -36,7 +36,9 @@ from hyundai_kia_connect_api import (
 )
 from hyundai_kia_connect_api.const import WINDOW_STATE
 from hyundai_kia_connect_api.exceptions import (
+    APIError,
     AuthenticationError,
+    RateLimitingError,
     UnsupportedControlError,
 )
 from hyundai_kia_connect_api.svm_image import render_views
@@ -65,6 +67,10 @@ _LOGGER = logging.getLogger(__name__)
 # set_svm_dewarp, consumed in image.py.
 SIGNAL_SVM_RENDER = DOMAIN + "_{}_svm_render"
 
+# "check" lets the library pick force or cached, "cached" is the server-side
+# cached state, "force" is an explicit fresh read.
+PollMode = Literal["check", "cached", "force"]
+
 
 class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching data from the API."""
@@ -82,13 +88,17 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
         self._svm_views: dict[
             str, tuple[tuple[dt.datetime | None, bool], dict[str, bytes]]
         ] = {}
+        # Vehicles whose last poll failed with a vehicle-scoped API error.
+        self._failed_vehicles: set[str] = set()
+        # Consecutive failed polls per vehicle (drives the "skip it" hint).
+        self._vehicle_failures: dict[str, int] = {}
 
         self.vehicle_manager = VehicleManager(
-            region=config_entry.data.get(CONF_REGION),
-            brand=config_entry.data.get(CONF_BRAND),
-            username=config_entry.data.get(CONF_USERNAME),
-            password=config_entry.data.get(CONF_PASSWORD),
-            pin=config_entry.data.get(CONF_PIN),
+            region=config_entry.data[CONF_REGION],
+            brand=config_entry.data[CONF_BRAND],
+            username=config_entry.data[CONF_USERNAME],
+            password=config_entry.data[CONF_PASSWORD],
+            pin=config_entry.data[CONF_PIN],
             geocode_api_enable=config_entry.options.get(
                 CONF_ENABLE_GEOLOCATION_ENTITY, DEFAULT_ENABLE_GEOLOCATION_ENTITY
             ),
@@ -175,74 +185,137 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
             ) from err
         current_hour = dt_util.now().hour
 
-        for vehicle_id in self.vehicle_manager.vehicles:
-            if (
-                (self.no_force_refresh_hour_start <= self.no_force_refresh_hour_finish)
-                and (
-                    current_hour < self.no_force_refresh_hour_start
-                    or current_hour >= self.no_force_refresh_hour_finish
-                )
-            ) or (
-                (self.no_force_refresh_hour_start >= self.no_force_refresh_hour_finish)
-                and (
-                    current_hour < self.no_force_refresh_hour_start
-                    and current_hour >= self.no_force_refresh_hour_finish
-                )
-            ):
-                try:
-                    await self.hass.async_add_executor_job(
-                        self.vehicle_manager.check_and_force_update_vehicle,
-                        self.force_refresh_interval,
-                        vehicle_id,
-                    )
-                except Exception as err:
-                    _LOGGER.error(f"Force update failed, falling back to cached: {err}")
-                    try:
-                        await self.hass.async_add_executor_job(
-                            self.vehicle_manager.update_vehicle_with_cached_state,
-                            vehicle_id,
-                        )
-                    except Exception as err:
-                        _LOGGER.error(f"Cached update failed: {err}")
+        in_force_window = (
+            (self.no_force_refresh_hour_start <= self.no_force_refresh_hour_finish)
+            and (
+                current_hour < self.no_force_refresh_hour_start
+                or current_hour >= self.no_force_refresh_hour_finish
+            )
+        ) or (
+            (self.no_force_refresh_hour_start >= self.no_force_refresh_hour_finish)
+            and (
+                current_hour < self.no_force_refresh_hour_start
+                and current_hour >= self.no_force_refresh_hour_finish
+            )
+        )
 
-            else:
-                try:
-                    await self.hass.async_add_executor_job(
-                        self.vehicle_manager.update_vehicle_with_cached_state,
-                        vehicle_id,
-                    )
-                except Exception as err:
-                    _LOGGER.error(f"Cached update failed: {err}")
-
+        await self._async_poll_vehicles(mode="check" if in_force_window else "cached")
         return self.data
 
     async def async_update(self, vehicle_id) -> None:
         """Update vehicle data."""
         await self.async_check_and_refresh_token()
         if (vehicle_id == None):
-            await self.hass.async_add_executor_job(
-               self.vehicle_manager.update_all_vehicles_with_cached_state
-            )
+            await self._async_poll_vehicles(mode="cached")
         else:
-            await self.hass.async_add_executor_job(
-                self.vehicle_manager.update_vehicle_with_cached_state,
-                vehicle_id,
-            )
+            await self._async_poll_vehicle(vehicle_id, mode="cached")
         self.async_set_updated_data(self.data)
 
     async def async_force_update(self, vehicle_id) -> None:
         """Force refresh vehicle data and update it."""
         await self.async_check_and_refresh_token()
         if (vehicle_id == None):
-            await self.hass.async_add_executor_job(
-                self.vehicle_manager.force_refresh_all_vehicles_states
-            )
+            await self._async_poll_vehicles(mode="force")
         else:
-            await self.hass.async_add_executor_job(
-                self.vehicle_manager.force_refresh_vehicle_state,
-                vehicle_id,
-            )
+            await self._async_poll_vehicle(vehicle_id, mode="force")
         self.async_set_updated_data(self.data)
+
+    async def _async_poll_vehicles(self, *, mode: PollMode) -> None:
+        """Poll each vehicle on its own so one failing vehicle can't fail all.
+
+        APIError is vehicle-scoped. Rate limiting and unknown exceptions are
+        account-scoped and raise UpdateFailed so Home Assistant backs off.
+        """
+        failed: set[str] = set()
+        auth_failures = 0
+        for vehicle_id in list(self.vehicle_manager.vehicles):
+            try:
+                await self._async_poll_vehicle(vehicle_id, mode=mode)
+            except AuthenticationError as err:
+                # The token is only repaired (refresh or re-login) by the next
+                # cycle's token check, which raises ConfigEntryAuthFailed itself
+                # if the credentials are bad.
+                auth_failures += 1
+                failed.add(vehicle_id)
+                self._log_vehicle_failure(vehicle_id, err)
+                if auth_failures == len(self.vehicle_manager.vehicles):
+                    raise UpdateFailed(
+                        f"Authentication failed for every vehicle: {err}"
+                    ) from err
+            except RateLimitingError as err:
+                raise UpdateFailed(
+                    f"Rate limited by the API: {err}", retry_after=2 * 60 * 60
+                ) from err
+            except APIError as err:
+                failed.add(vehicle_id)
+                self._log_vehicle_failure(vehicle_id, err)
+            except Exception as err:
+                # UpdateFailed is logged without a traceback.
+                _LOGGER.exception("%s - Error communicating with API", DOMAIN)
+                raise UpdateFailed(f"Error communicating with API: {err}") from err
+            else:
+                self._vehicle_failures.pop(vehicle_id, None)
+        self._failed_vehicles = failed
+
+    async def _async_poll_vehicle(self, vehicle_id: str, *, mode: PollMode) -> None:
+        """Update one vehicle, falling back to the cached state if a force fails."""
+        try:
+            if mode == "check":
+                await self.hass.async_add_executor_job(
+                    self.vehicle_manager.check_and_force_update_vehicle,
+                    self.force_refresh_interval,
+                    vehicle_id,
+                )
+            elif mode == "force":
+                await self.hass.async_add_executor_job(
+                    self.vehicle_manager.force_refresh_vehicle_state, vehicle_id
+                )
+            else:
+                await self.hass.async_add_executor_job(
+                    self.vehicle_manager.update_vehicle_with_cached_state, vehicle_id
+                )
+        except Exception as err:
+            if mode == "cached":
+                raise
+            _LOGGER.warning(
+                "%s - Force refresh failed for %s (%s), using cached state: %s",
+                DOMAIN,
+                self.vehicle_manager.vehicles[vehicle_id].name,
+                vehicle_id,
+                err,
+            )
+            await self.hass.async_add_executor_job(
+                self.vehicle_manager.update_vehicle_with_cached_state, vehicle_id
+            )
+
+    def _log_vehicle_failure(self, vehicle_id: str, err: Exception) -> None:
+        vehicle = self.vehicle_manager.vehicles[vehicle_id]
+        failures = self._vehicle_failures.get(vehicle_id, 0) + 1
+        self._vehicle_failures[vehicle_id] = failures
+        _LOGGER.warning(
+            "%s - Failed to update %s (%s): %s: %s",
+            DOMAIN,
+            vehicle.name,
+            vehicle_id,
+            type(err).__name__,
+            err,
+        )
+        if failures == 3:
+            # A vehicle the backend no longer serves (e.g. a sold car) fails
+            # every poll; stop polling it by disabling the device in HA.
+            _LOGGER.warning(
+                "%s - Vehicle %s (%s) failed %s polls in a row. If the backend "
+                "no longer serves it, disable its device in Home Assistant "
+                "to stop polling it.",
+                DOMAIN,
+                vehicle.name,
+                vehicle_id,
+                failures,
+            )
+
+    def vehicle_available(self, vehicle_id: str) -> bool:
+        """Return False if the vehicle's last poll failed."""
+        return vehicle_id not in self._failed_vehicles
 
     async def async_force_refresh_vehicle(self, vehicle_id: str) -> None:
         """Force refresh a single vehicle's state."""
@@ -327,6 +400,24 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
             self.vehicle_manager.check_and_refresh_token
         )
         await self._async_save_token()
+        self._sync_vehicle_enabled_states()
+
+    @callback
+    def _sync_vehicle_enabled_states(self) -> None:
+        """Stop polling vehicles whose device the user disabled in HA."""
+        assert self.config_entry is not None
+        registry = dr.async_get(self.hass)
+        for vehicle_id, vehicle in self.vehicle_manager.vehicles.items():
+            identifiers = {(DOMAIN, vehicle_id)}
+            if vehicle.VIN:
+                identifiers.add((DOMAIN, f"vin:{vehicle.VIN}"))
+            devices = registry.async_get_devices(
+                identifiers=identifiers, config_entry_id=self.config_entry.entry_id
+            )
+            if any(device.disabled for device in devices):
+                self.vehicle_manager.disable_vehicle(vehicle_id)
+            else:
+                self.vehicle_manager.enable_vehicle(vehicle_id)
 
     async def async_await_action_and_refresh(
         self, vehicle_id: str, action_id: str
@@ -437,6 +528,7 @@ class HyundaiKiaConnectDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any
         """Persist the latest token into the config entry."""
         config_entry = self.config_entry
         assert config_entry is not None
+        assert self.vehicle_manager.token is not None
         new_token = self.vehicle_manager.token.to_dict()
         # Only update if token actually changed
         if new_token and new_token != config_entry.data.get(CONF_TOKEN):

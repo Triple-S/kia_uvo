@@ -12,8 +12,8 @@ services.yaml (required: true), not by the Python handler.
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from hyundai_kia_connect_api.ApiImpl import POICoord, POIInfo
+import pytest
 
 # --- Minimal stubs (no HA dependency) ---
 
@@ -100,7 +100,7 @@ class StubCoordinator:
         self._vehicle_manager.set_navigation = MagicMock(return_value="action-123")
         self._hass = MagicMock()
         self._hass.async_add_executor_job = AsyncMock(side_effect=self._executor_job)
-        self._hass.async_create_task = MagicMock()
+        self._hass.async_create_task = MagicMock(side_effect=lambda coro: coro.close())
 
     async def _executor_job(self, fn, *args):
         """Simulate executor job by calling fn directly."""

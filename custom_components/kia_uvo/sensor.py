@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
+import logging
 from typing import Any, Final, cast
 
 from homeassistant.components.sensor import (
@@ -18,13 +18,15 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
     EntityCategory,
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from hyundai_kia_connect_api import Vehicle
@@ -42,12 +44,28 @@ class HyundaiKiaSensorEntityDescription(SensorEntityDescription):
     """A class that describes custom sensor entities."""
 
     exists: Callable[[Vehicle], bool] | None = None
+    value_fn: Callable[[Vehicle], StateType] | None = None
 
 
 def _is_electrified(vehicle: Vehicle) -> bool:
     """Return True for BEV and PHEV vehicles."""
     return vehicle.engine_type in (ENGINE_TYPES.EV, ENGINE_TYPES.PHEV)
 
+
+def _connector_lock_state_name(vehicle: Vehicle) -> str | None:
+    """Return the lowercase enum name, or None while unknown."""
+    state = vehicle.ev_connector_lock_state
+    return None if state is None else state.name.lower()
+
+
+TIRE_PRESSURE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "tire_pressure_front_left",
+        "tire_pressure_front_right",
+        "tire_pressure_rear_left",
+        "tire_pressure_rear_right",
+    }
+)
 
 SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
     HyundaiKiaSensorEntityDescription(
@@ -126,8 +144,11 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
         key="ev_battery_soh_percentage",
         translation_key="ev_battery_soh_percentage",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.BATTERY,
+        icon="mdi:battery-heart",
         state_class=SensorStateClass.MEASUREMENT,
+        # Not BATTERY (kia_uvo #2085): battery means charge left, not health.
+        # The lib keeps the 255 sentinel (kia_uvo #1935) unknown.
+        exists=_is_electrified,
     ),
     HyundaiKiaSensorEntityDescription(
         key="ev_battery_remain",
@@ -329,6 +350,13 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
         icon="mdi:clock-outline",
     ),
     HyundaiKiaSensorEntityDescription(
+        key="ev_connector_lock_state",
+        translation_key="ev_connector_lock_state",
+        icon="mdi:lock",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_connector_lock_state_name,
+    ),
+    HyundaiKiaSensorEntityDescription(
         key="ev_charging_current",
         translation_key="ev_charging_current",
         icon="mdi:lightning-bolt-circle",
@@ -384,12 +412,22 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
         translation_key="ev_first_departure_days",
         icon="mdi:calendar-clock",
         entity_category=EntityCategory.DIAGNOSTIC,
+        exists=lambda vehicle: (
+            getattr(vehicle, "ev_first_departure_enabled", None) is not None
+            or getattr(vehicle, "ev_first_departure_time", None) is not None
+            or getattr(vehicle, "ev_first_departure_days", None) is not None
+        ),
     ),
     HyundaiKiaSensorEntityDescription(
         key="ev_second_departure_days",
         translation_key="ev_second_departure_days",
         icon="mdi:calendar-clock",
         entity_category=EntityCategory.DIAGNOSTIC,
+        exists=lambda vehicle: (
+            getattr(vehicle, "ev_second_departure_enabled", None) is not None
+            or getattr(vehicle, "ev_second_departure_time", None) is not None
+            or getattr(vehicle, "ev_second_departure_days", None) is not None
+        ),
     ),
     HyundaiKiaSensorEntityDescription(
         key="_ev_first_departure_climate_temperature",
@@ -486,9 +524,10 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
     # exactly for direct-TPMS vehicles (known PressureUnit), None
     # for indirect TPMS (PressureUnit 3, e.g. KONA — #1786) and
     # old-protocol vehicles, which never report a numeric
-    # pressure. A None pressure -> HA `unknown` until a poll
-    # catches the car driving. The same gate applies to all four
-    # tire_pressure_* sensors below.
+    # pressure. While parked the backend reports no-data sentinels,
+    # so the sensor retains its last known reading and restores it
+    # across restarts rather than dropping to `unknown`. The same
+    # gate applies to all four tire_pressure_* sensors below.
     HyundaiKiaSensorEntityDescription(
         key="tire_pressure_front_left",
         translation_key="tire_pressure_front_left",
@@ -537,6 +576,76 @@ SENSOR_DESCRIPTIONS: Final[tuple[HyundaiKiaSensorEntityDescription, ...]] = (
         key="drive_mode",
         translation_key="drive_mode",
         icon="mdi:car-cog",
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="gear_position",
+        translation_key="gear_position",
+        icon="mdi:car-shift-pattern",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="steering_wheel_heat_step",
+        translation_key="steering_wheel_heat_step",
+        icon="mdi:steering",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="ev_v2l_discharge_remain_time",
+        translation_key="ev_v2l_discharge_remain_time",
+        icon="mdi:battery-charging-low",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        exists=lambda vehicle: (
+            vehicle.ev_v2l_discharge_limit is not None
+            or vehicle.ev_v2l_mode is not None
+            or vehicle.ev_v2l_discharge_dte is not None
+        ),
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="ev_v2l_discharge_dte",
+        translation_key="ev_v2l_discharge_dte",
+        icon="mdi:road-variant",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        exists=lambda vehicle: (
+            vehicle.ev_v2l_discharge_limit is not None
+            or vehicle.ev_v2l_mode is not None
+            or vehicle.ev_v2l_discharge_dte is not None
+        ),
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="ev_v2l_mode",
+        translation_key="ev_v2l_mode",
+        icon="mdi:speedometer",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        exists=lambda vehicle: (
+            vehicle.ev_v2l_discharge_limit is not None
+            or vehicle.ev_v2l_mode is not None
+            or vehicle.ev_v2l_discharge_dte is not None
+        ),
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="average_fuel_economy_accumulated",
+        translation_key="average_fuel_economy_accumulated",
+        icon="mdi:gas-station",
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists=lambda vehicle: vehicle.average_fuel_economy_unit is not None,
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="average_fuel_economy_drive",
+        translation_key="average_fuel_economy_drive",
+        icon="mdi:gas-station",
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists=lambda vehicle: vehicle.average_fuel_economy_unit is not None,
+    ),
+    HyundaiKiaSensorEntityDescription(
+        key="average_fuel_economy_after_refuel",
+        translation_key="average_fuel_economy_after_refuel",
+        icon="mdi:gas-station",
+        native_unit_of_measurement=DYNAMIC_UNIT,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists=lambda vehicle: vehicle.average_fuel_economy_unit is not None,
     ),
     HyundaiKiaSensorEntityDescription(
         key="ev_charge_limits_ac",
@@ -615,6 +724,8 @@ PARALLEL_UPDATES = 0
 class HyundaiKiaConnectSensor(RestoreSensor, SensorEntity, HyundaiKiaConnectEntity):
     """Hyundai / Kia Connect sensor class."""
 
+    entity_description: HyundaiKiaSensorEntityDescription
+
     def __init__(
         self,
         coordinator: HyundaiKiaConnectDataUpdateCoordinator,
@@ -626,6 +737,11 @@ class HyundaiKiaConnectSensor(RestoreSensor, SensorEntity, HyundaiKiaConnectEnti
         self.entity_description = description
         self._key = description.key
         self._last_dynamic_unit: str | None = None
+        self._last_known_value: StateType | None = None
+        if self._key in TIRE_PRESSURE_KEYS:
+            initial_value = getattr(vehicle, self._key, None)
+            if initial_value is not None:
+                self._last_known_value = cast(StateType, initial_value)
         self._attr_unique_id = f"{DOMAIN}_{vehicle.id}_{self._key}"
         self._attr_icon = description.icon
         self._attr_state_class = description.state_class
@@ -646,21 +762,61 @@ class HyundaiKiaConnectSensor(RestoreSensor, SensorEntity, HyundaiKiaConnectEnti
     @property
     def native_value(self) -> StateType | datetime:
         """Return the value reported by the sensor."""
+        if self.entity_description.value_fn is not None:
+            return self.entity_description.value_fn(self.vehicle)
         value = getattr(self.vehicle, self._key)
         if self._key == "ev_charging_current":
             return CHARGING_CURRENTS.get(value, None)
         if self._key in ("ev_first_departure_days", "ev_second_departure_days"):
-            if isinstance(value, list):
+            if isinstance(value, list) and value:
                 return ", ".join(str(d) for d in value)
+            if value in (None, [], ""):
+                return "None"
             return cast(StateType | datetime, value)
+        if self._key in TIRE_PRESSURE_KEYS:
+            value = getattr(self.vehicle, self._key, None)
+            if value is not None:
+                return cast(StateType, value)
+            return self._last_known_value
         return cast(StateType | datetime, value)
 
     async def async_added_to_hass(self) -> None:
-        """Restore the last known dynamic unit after a restart."""
+        """Restore the last known dynamic unit and value after a restart."""
         await super().async_added_to_hass()
         last_sensor_data = await self.async_get_last_sensor_data()
-        if last_sensor_data is not None and last_sensor_data.native_unit_of_measurement:
-            self._last_dynamic_unit = last_sensor_data.native_unit_of_measurement
+        if last_sensor_data is not None:
+            if last_sensor_data.native_unit_of_measurement:
+                self._last_dynamic_unit = last_sensor_data.native_unit_of_measurement
+            if (
+                self._key in TIRE_PRESSURE_KEYS
+                and self._last_known_value is None
+                and last_sensor_data.native_value is not None
+            ):
+                self._last_known_value = cast(StateType, last_sensor_data.native_value)
+
+        if (
+            self._key in TIRE_PRESSURE_KEYS
+            and self._last_known_value is None
+            and (last_state := await self.async_get_last_state()) is not None
+            and last_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        ):
+            try:
+                self._last_known_value = (
+                    float(last_state.state)
+                    if "." in last_state.state
+                    else int(last_state.state)
+                )
+            except ValueError:
+                pass
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        if self._key in TIRE_PRESSURE_KEYS:
+            value = getattr(self.vehicle, self._key, None)
+            if value is not None:
+                self._last_known_value = cast(StateType, value)
+        super()._handle_coordinator_update()
 
     @property
     def native_unit_of_measurement(self) -> str | None:
@@ -747,6 +903,8 @@ class DailyDrivingStatsEntity(SensorEntity, HyundaiKiaConnectEntity):
         """Return the driving stats for each day, keyed by date."""
         m: dict[str, Any] = {}
         for day in self.vehicle.daily_stats:
+            if day.date is None:
+                continue
             key = day.date.strftime("%Y-%m-%d")
             value = {
                 "total_consumed": day.total_consumed,
@@ -799,7 +957,10 @@ class SVMStatusSensor(SensorEntity, HyundaiKiaConnectEntity):
     def native_value(self) -> datetime | None:
         """Return the capture timestamp of the latest SVM image."""
         details = self.coordinator.get_cached_svm_details(self.vehicle.id)
-        return cast(datetime | None, details.captured_at) if details else None
+        if details is None:
+            return None
+        captured_at: datetime | None = details.captured_at
+        return captured_at
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
